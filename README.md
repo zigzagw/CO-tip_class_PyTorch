@@ -17,7 +17,7 @@ This will create a conda enviroment named tf-gpu with the all the required packa
 conda activate pytorch-gpu
 ```
 
-To create the datasets and train the models, run `jupyter notebook` in the repository folder, open the `train_CO_tips.ipynb` notebook, and follow the instructions therein.
+To create the datasets and train the models, run `jupyter notebook` in the repository folder, open the `train_CO-tips.ipynb` notebook, and follow the instructions therein.
 
 The folder `pretrained_weights` holds the weights for pretrained model.
 
