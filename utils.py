@@ -739,8 +739,9 @@ def generate_data_from_images(path_to_data,dir,classes, crop_size, enable_rotati
         amount_rot = 1
 
     for class_ind, cls in enumerate(classes):
-
+        assert os.path.exists(path_to_data), f"Path {path_to_data} does not exist or not setted"
         images = glob.glob(path_to_data+'/'+dir+'/'+cls + '/' +'*.png')
+        assert not (len(images)==0), f"Folder {path_to_data}/{dir}/{cls} has no files"
         for image_path in images:
             image = np.array((Image.open(image_path).resize((crop_size,crop_size), Image.ANTIALIAS))).astype(np.float32)
             #print (image.shape) 
@@ -755,7 +756,7 @@ def generate_data_from_images(path_to_data,dir,classes, crop_size, enable_rotati
 
 def make_batch_plots(X,Y, preds, epoch,batch_ind, set_name, 
                      classes          = ['bads', 'goods'], 
-                     cmap=cm.afmhot,outdir = './CNN3/', verbose = 1):
+                     cmap=cm.gray,outdir = './CNN3/', verbose = 1):
     outdir = outdir+ 'predictions/'
     column_names = ['AFM Data']    
     if not os.path.exists(outdir):
