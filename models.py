@@ -61,7 +61,7 @@ class conv_net2(nn.Module):
         #self.fc1 = nn.Linear(256, 64)
         self.fc1 = nn.Linear(64, 32)
         #self.fc1 = nn.Linear(246016, 128)
-        self.fc2 = nn.Linear(32, 2)
+        self.fc2 = nn.Linear(32, 1)
         #self.fc2 = nn.Linear(128, 3)
         self.lrelu = nn.LeakyReLU(0.1)
          
@@ -84,5 +84,5 @@ class conv_net2(nn.Module):
         x = x.view(x.size(0), -1)
         #print(f'x.shape = {x.shape}')
         x = self.dropout2(self.lrelu(self.fc1(x)))
-        x= self.fc2(x)
+        x = torch.sigmoid(self.fc2(x))  #sigmoid as we use BCELoss
         return x

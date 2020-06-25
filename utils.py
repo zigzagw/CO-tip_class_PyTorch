@@ -508,7 +508,7 @@ def divide_to_classes(xyz_batch, classes):
 
 class accuMetrics:
     
-    def __init__(self, n_classes,  conf_level_points=101, conf_mat_level=0.1):
+    def __init__(self, n_classes,  conf_level_points=101, conf_mat_level=0.5):
         self.n_classes = n_classes
         self.conf_level_points = conf_level_points
         self.conf_mat_level = conf_mat_level
@@ -524,64 +524,30 @@ class accuMetrics:
         self.losses = []
 
     def add_preds(self, preds, true, losses):
-        
+        '''
+        Add a batch of predictions.
+        Arguments:
+            preds: np.ndarray in same format as the return value of encode_xyz. Predictions.
+            true: np.ndarray in same format as the return value of encode_xyz. References.
+            losses: np.ndarray of shape (1, batch_size). Losses for each batch item.
+        '''
          
         #preds = preds.reshape((-1, preds.shape[-1]))
         #true = true.reshape((-1, preds.shape[-1]))
     
         # Add to confusion matrix
+        #print (f'self.conf_mat.keys() = {self.conf_mat.keys()}')
         true_classes = true
         for conf_level in self.conf_mat.keys():
-            #print (f'preds = {preds}')
-            _, pred_classes = torch.max(preds,1)
-            #print (f'pred_classes = {pred_classes}')
+            #print (f'preds[0] = {preds[0]}')
+            pred_classes = np.ones_like(true) #np.argmax(preds, axis=1)
+            pred_classes[preds[:,1] < conf_level] = 0
+            #print (f'pred_classes = {pred_classes[:10]}')
             np.add.at(self.conf_mat[conf_level], (true_classes, pred_classes), 1)
 
  
     def plot(self, outdir='./', verbose=1):
         
-        # Confusion matrix
-
-        fig = plt.figure()
-        fig.set_size_inches(9, 11)
-
-        ax1 = fig.add_axes([0.05,0.55,0.5,0.4])
-        cbar_ax1 = fig.add_axes([0.58,0.55,0.02,0.4])
-        ax2 = fig.add_axes([0.05,0.05,0.5,0.4])
-        cbar_ax2 = fig.add_axes([0.58,0.05,0.02,0.4])
-        
-        axes = [ax1]
-        c_axes = [cbar_ax1]
-        conf_mats = [self.conf_mat[self.conf_mat_level]]
-        for ax, cbar_ax, conf_mat in zip(axes, c_axes, conf_mats):
-
-            conf_mat_norm = np.zeros_like(conf_mat)
-            for i, r in enumerate(conf_mat):
-                conf_mat_norm[i] = r / np.sum(r)
-
-            im = ax.imshow(conf_mat_norm, cmap=cm.Blues)
-            plt.colorbar(im, cax=cbar_ax)
-            ax.set_xticks(np.arange(self.n_classes))
-            ax.set_yticks(np.arange(self.n_classes))
-            ax.set_xlabel('Predicted class')
-            ax.set_ylabel('True class')
-            ax.set_xticklabels(['A925L', 'A925L#AL', 'A925L#CR'])
-            ax.set_yticklabels(['A925L', 'A925L#AL', 'A925L#CR'], rotation='vertical')
-            for i in range(conf_mat.shape[0]):
-                for j in range(conf_mat.shape[1]):
-                    color = 'white' if conf_mat_norm[i,j] > 0.5 else 'black'
-                    label = '{:.3f}'.format(conf_mat_norm[i,j])+'\n('+'{:.3E}'.format(conf_mat[i,j])+')'
-                    ax.text(j, i, label, ha='center', va='center', color=color)
-        
-        ax1.set_title('Class confusion matrix')
-
-        
-        # Save figure
-        outfile = outdir+'conf_mats.png'
-        plt.savefig(outfile)
-        if verbose > 0: print('Confusion matrix plots saved to '+outfile)
-        plt.close()
-            
         # Statistics
 
         self.acc = np.sum(np.diagonal(self.conf_mat[self.conf_mat_level])) / np.sum(self.conf_mat[self.conf_mat_level])
@@ -610,11 +576,6 @@ class accuMetrics:
         if verbose > 0: print('Statistical information saved to '+outfile)
 
         fs = 16
-        fig.text(0.7, 0.9, 'Accuracy: %.4f' % self.acc, fontsize=fs)
-        fig.text(0.7, 0.85, 'Precision: %.4f' % self.prec[1], fontsize=fs)
-        fig.text(0.7, 0.8, 'Recall: %.4f' % self.rec[1], fontsize=fs)
-        
- 
         
         
         # Precision-Recall curve
@@ -629,8 +590,14 @@ class accuMetrics:
  
             conf_levels = sorted(self.conf_mat.keys())
             for j, conf_level in enumerate(conf_levels):
-                pi += [self.conf_mat[conf_level][i,i] / np.sum(self.conf_mat[conf_level][:,i])]
-                ri += [self.conf_mat[conf_level][i,i] / np.sum(self.conf_mat[conf_level][i,:])]
+                if (np.sum(self.conf_mat[conf_level][:,i]) >0 ):
+                    pi += [self.conf_mat[conf_level][i,i] / np.sum(self.conf_mat[conf_level][:,i])]
+                else:
+                    pi.append(1.0)
+                if (np.sum(self.conf_mat[conf_level][i,:]) >0 ):                 
+                    ri += [self.conf_mat[conf_level][i,i] / np.sum(self.conf_mat[conf_level][i,:])]
+                else:
+                    ri.append(1.0)
                  
                 if np.isnan(pi[-1]):
                     pi[-1] = 1.0
@@ -639,30 +606,30 @@ class accuMetrics:
                     conf_mat_ind = j
             
             if i == 0:
-                cls = 'Background'
+                cls = 'bads'
             else:
-                cls = 'Atoms %d' % i
+                cls = 'goods' 
             
             fig = plt.figure()
-            fig.set_size_inches(6, 12)
-            ax1 = fig.add_axes([0.1,0.55,0.8,0.4])
-            ax2 = fig.add_axes([0.1,0.05,0.8,0.4])
+            fig.set_size_inches(12,6)
+            ax1 = fig.add_axes([0.05, 0.1,0.4,0.8])
+            ax2 = fig.add_axes([0.55, 0.1,0.4,0.8])
 
             ax1.plot(ri, pi)
             ax2.plot(conf_levels, pi)
             ax2.plot(conf_levels, ri)
             ax1.scatter(ri[conf_mat_ind], pi[conf_mat_ind], marker='o', color='r')
 
-            ax1.set_title('Precision-Recall curve (%s)' % cls)
+            ax1.set_title('Precision-Recall curve')
             ax1.set_xlabel('Recall', fontsize=12)
             ax1.set_ylabel('Precision', fontsize=12)
-            ax2.set_title('Precision and Recall (%s)' % cls)
+            ax2.set_title('Precision and Recall')
             ax2.set_xlabel('Confidence threshold', fontsize=12)
             ax2.legend(['Precision', 'Recall'])
 
             # Area under the curve
             auc = -trapz(pi, ri)
-            fig.text(0.12, 0.5, 'AUC: %.4f' % auc, fontsize=fs)
+            fig.text(0.06, 0.12, 'AUC: %.4f' % auc, fontsize=fs)
 
             # Store values
             self.prec_threshold.append(pi)
@@ -673,7 +640,7 @@ class accuMetrics:
             # Save figure
             outfile = outdir+'prec-rec_%s.png' % cls
             plt.savefig(outfile)
-            if verbose > 0: print('xyz precision-recall curve (%s) plot saved to %s' % (cls, outfile))
+            if verbose > 0: print('precision-recall curve (%s) plot saved to %s' % (cls, outfile))
             plt.close()
 
         # Save data to text file
@@ -683,38 +650,7 @@ class accuMetrics:
                 for prec, rec in zip(self.prec_threshold[i], self.rec_threshold[i]):
                     f.write('%f,%f\n' % (prec, rec))
         
-        # Distance histogram
-
-        fig = plt.figure()
-        fig.set_size_inches(9, 11)
-        ax1 = fig.add_axes([0.1,0.55,0.5,0.4])
-        ax2 = fig.add_axes([0.1,0.05,0.5,0.4])
         
-        ax1.hist(self.dist, bins=20, edgecolor='black', density=True)
-        ax1.set_title('Localization error ($\AA$)')
-
-        self.m = np.mean(self.dist)
-        self.md = np.median(self.dist)
-        self.std = np.std(self.dist)
-
-        fig.text(0.7, 0.90, 'Mean: %.4f' % self.m, fontsize=fs)
-        fig.text(0.7, 0.85, 'Median: %.4f' % self.md, fontsize=fs)
-        fig.text(0.7, 0.80, 'Std: %.4f' % self.std, fontsize=fs)
-        
-        ax2.hist(self.losses, bins=20, edgecolor='black', density=True)
-        ax2.set_title('Losses on test set')
-        fig.text(0.7, 0.40, 'Mean loss: %.4f' % np.mean(self.losses), fontsize=fs)
-
-        # Save figure
-        outfile = outdir+'xyz_metrics.png'
-        plt.savefig(outfile)
-        if verbose > 0: print('xyz metrics plot saved to '+outfile)
-        plt.close()
-        
-        # Save data to text file
-        with open(outdir+'dist.csv', 'w') as f:
-            for d in self.dist:
-                f.write('%f\n' % d)
 
 
 
@@ -739,9 +675,8 @@ def generate_data_from_images(path_to_data,dir,classes, crop_size, enable_rotati
         amount_rot = 1
 
     for class_ind, cls in enumerate(classes):
-        assert os.path.exists(path_to_data), f"Path {path_to_data} does not exist or not setted"
+
         images = glob.glob(path_to_data+'/'+dir+'/'+cls + '/' +'*.png')
-        assert not (len(images)==0), f"Folder {path_to_data}/{dir}/{cls} has no files"
         for image_path in images:
             image = np.array((Image.open(image_path).resize((crop_size,crop_size), Image.ANTIALIAS))).astype(np.float32)
             #print (image.shape) 
@@ -756,7 +691,7 @@ def generate_data_from_images(path_to_data,dir,classes, crop_size, enable_rotati
 
 def make_batch_plots(X,Y, preds, epoch,batch_ind, set_name, 
                      classes          = ['bads', 'goods'], 
-                     cmap=cm.gray,outdir = './CNN3/', verbose = 1):
+                     cmap=cm.gray,outdir = './CNN/', verbose = 1):
     outdir = outdir+ 'predictions/'
     column_names = ['AFM Data']    
     if not os.path.exists(outdir):
@@ -776,8 +711,8 @@ def make_batch_plots(X,Y, preds, epoch,batch_ind, set_name,
            fig.add_subplot(rows,cols,img_ind+1)
            plt.imshow(X[img_ind*4,0,:,:], cmap = cmap, origin="lower")
            plt.colorbar()
-           formattedList = [f'{preds[img_ind*4][j].tolist(): 0.2f}' for j in range(2)]
-           plt.xlabel(f'{formattedList} True:{classes[Y[i]]}') 
+           formattedList = [f'{preds[img_ind*4][k].tolist(): 0.2f}' for k in range(2)]
+           plt.xlabel(f'{formattedList} True:{classes[Y[img_ind*4]]}') 
            img_ind+=1
     save_name = f'{outdir}epoch{epoch}_batch{batch_ind}_{set_name}.png'
     plt.savefig(save_name, bbox_inches="tight")
@@ -809,6 +744,16 @@ def plot_confusion_matrix(ax, conf_mat, tick_labels):
     plt.ylim([1.5, -0.5])
     plt.tight_layout()
 
+
+def plot_roc_curve(ax, fpr, tpr,roc_auc):
+    ax.plot(fpr, tpr, 'b', label = 'AUC = %0.2f' % roc_auc)
+    ax.legend(loc = 'lower right')
+    ax.plot([0, 1], [0, 1],'r--')
+    plt.xlim([0, 1])
+    plt.ylim([0, 1])
+    ax.set_ylabel('True Positive Rate')
+    ax.set_xlabel('False Positive Rate')
+    plt.tight_layout()
  
 
 
